@@ -369,3 +369,51 @@
     (if (>= total-xp u50000) (* base-reward u5)
       (if (>= total-xp u15000) (* base-reward u3)
         (if (>= total-xp u5000) (* base-reward u2) base-reward)))))
+
+(define-read-only (get-xp-nft-info (nft-id uint))
+  (map-get? xp-nfts { nft-id: nft-id }))
+
+(define-read-only (get-game-info (game-id uint))
+  (map-get? registered-games { game-id: game-id }))
+
+(define-read-only (get-player-progress (player principal) (game-id uint))
+  (map-get? player-game-progress { player: player, game-id: game-id }))
+
+(define-read-only (get-cross-game-stats (player principal))
+  (map-get? cross-game-stats { player: player }))
+
+(define-read-only (get-milestone-info (tier (string-ascii 20)))
+  (map-get? xp-milestones { tier: tier }))
+
+(define-read-only (get-nft-owner (nft-id uint))
+  (nft-get-owner? xp-nft nft-id))
+
+(define-read-only (get-season-info (season-id uint))
+  (map-get? seasons { season-id: season-id }))
+
+(define-read-only (get-referral-stats (referrer principal))
+  (map-get? player-referrals { referrer: referrer }))
+
+(define-read-only (get-tournament-info (game-id uint) (tournament-id uint))
+  (map-get? game-tournaments { game-id: game-id, tournament-id: tournament-id }))
+
+(define-read-only (get-daily-reward-status (player principal) (day uint))
+  (map-get? daily-rewards-claimed { player: player, day: day }))
+
+(define-read-only (get-platform-status)
+  {
+    paused: (var-get platform-paused),
+    fee-rate: (var-get contract-fee-rate),
+    total-fees: (var-get total-contract-fees),
+    next-nft-id: (var-get next-xp-nft-id),
+    next-game-id: (var-get next-game-id),
+    next-season-id: (var-get next-season-id)
+  })
+
+(define-read-only (calculate-level-from-xp (xp-amount uint))
+  (/ xp-amount u100))
+
+(define-read-only (calculate-xp-to-next-level (current-xp uint))
+  (let ((current-level (/ current-xp u100))
+        (next-level-xp (* (+ current-level u1) u100)))
+    (- next-level-xp current-xp)))
