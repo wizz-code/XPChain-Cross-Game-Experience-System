@@ -229,3 +229,88 @@
           })))
       
       (ok new-total-xp))))
+
+(define-public (create-season 
+  (season-name (string-ascii 30))
+  (start-time uint)
+  (end-time uint)
+  (prize-pool uint))
+  (let ((season-id (var-get next-season-id)))
+    (begin
+      (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+      (asserts! (> end-time start-time) err-invalid-parameters)
+      (asserts! (> prize-pool u0) err-invalid-parameters)
+      
+      (map-set seasons { season-id: season-id }
+        {
+          season-name: season-name,
+          start-time: start-time,
+          end-time: end-time,
+          is-active: true,
+          total-participants: u0,
+          prize-pool: prize-pool
+        })
+      
+      (var-set next-season-id (+ season-id u1))
+      (ok season-id))))
+
+(define-public (claim-daily-reward (day uint))
+  (let 
+    ((current-time (unwrap-panic (get-stacks-block-info? time (- stacks-block-height u1))))
+     (daily-key { player: tx-sender, day: day })
+     (player-stats (unwrap! (map-get? cross-game-stats { player: tx-sender }) err-unauthorized))
+     (reward-amount (calculate-daily-reward (get total-xp-earned player-stats))))
+    (begin
+      (asserts! (not (var-get platform-paused)) err-unauthorized)
+      (asserts! (is-none (map-get? daily-rewards-claimed daily-key)) err-already-claimed)
+      (asserts! (>= (get total-xp-earned player-stats) u100) err-insufficient-xp)
+      
+      (map-set daily-rewards-claimed daily-key
+        { claimed: true, reward-amount: reward-amount })
+      
+      (ok reward-amount))))
+
+(define-public (add-referral-bonus (referrer principal) (referred-player principal) (bonus-xp uint))
+  (let 
+    ((referral-info (default-to { total-referrals: u0, bonus-xp-earned: u0 }
+                                 (map-get? player-referrals { referrer: referrer }))))
+    (begin
+      (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+      (asserts! (> bonus-xp u0) err-invalid-xp-amount)
+      
+      (map-set player-referrals { referrer: referrer }
+        {
+          total-referrals: (+ (get total-referrals referral-info) u1),
+          bonus-xp-earned: (+ (get bonus-xp-earned referral-info) bonus-xp)
+        })
+      
+      (ok true))))
+
+(define-public (create-tournament 
+  (game-id uint)
+  (tournament-name (string-ascii 40))
+  (entry-fee uint)
+  (max-participants uint)
+  (start-time uint)
+  (end-time uint))
+  (let 
+    ((game-info (unwrap! (map-get? registered-games { game-id: game-id }) err-game-not-registered))
+     (tournament-id u1))
+    (begin
+      (asserts! (is-eq tx-sender (get developer game-info)) err-unauthorized)
+      (asserts! (> max-participants u0) err-invalid-parameters)
+      (asserts! (> end-time start-time) err-invalid-parameters)
+      
+      (map-set game-tournaments { game-id: game-id, tournament-id: tournament-id }
+        {
+          tournament-name: tournament-name,
+          entry-fee: entry-fee,
+          prize-pool: u0,
+          max-participants: max-participants,
+          current-participants: u0,
+          start-time: start-time,
+          end-time: end-time,
+          is-active: true
+        })
+      
+      (ok tournament-id))))
