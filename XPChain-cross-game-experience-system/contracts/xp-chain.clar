@@ -314,3 +314,58 @@
         })
       
       (ok tournament-id))))
+
+(define-public (transfer-xp-nft (nft-id uint) (recipient principal))
+  (let ((nft-info (unwrap! (map-get? xp-nfts { nft-id: nft-id }) err-nft-not-found)))
+    (begin
+      (asserts! (not (var-get platform-paused)) err-unauthorized)
+      (asserts! (is-eq tx-sender (get player nft-info)) err-unauthorized)
+      (try! (nft-transfer? xp-nft nft-id tx-sender recipient))
+      
+      (map-set xp-nfts { nft-id: nft-id }
+        (merge nft-info { player: recipient }))
+      
+      (ok true))))
+
+(define-public (burn-xp-nft (nft-id uint))
+  (let ((nft-info (unwrap! (map-get? xp-nfts { nft-id: nft-id }) err-nft-not-found)))
+    (begin
+      (asserts! (not (var-get platform-paused)) err-unauthorized)
+      (asserts! (is-eq tx-sender (get player nft-info)) err-unauthorized)
+      (try! (nft-burn? xp-nft nft-id tx-sender))
+      
+      (map-delete xp-nfts { nft-id: nft-id })
+      (map-delete player-game-progress { player: tx-sender, game-id: (get game-id nft-info) })
+      
+      (ok true))))
+
+(define-public (set-platform-pause (paused bool))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set platform-paused paused)
+    (ok paused)))
+
+(define-public (update-fee-rate (new-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (<= new-rate u1000) err-invalid-parameters) ;; Max 10%
+    (var-set contract-fee-rate new-rate)
+    (ok new-rate)))
+
+(define-public (withdraw-fees (amount uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (<= amount (var-get total-contract-fees)) err-insufficient-xp)
+    (var-set total-contract-fees (- (var-get total-contract-fees) amount))
+    (ok amount)))
+
+(define-private (calculate-milestone-tier (xp-amount uint))
+  (if (>= xp-amount u50000) "platinum"
+    (if (>= xp-amount u15000) "gold"
+      (if (>= xp-amount u5000) "silver" "bronze"))))
+
+(define-private (calculate-daily-reward (total-xp uint))
+  (let ((base-reward u10))
+    (if (>= total-xp u50000) (* base-reward u5)
+      (if (>= total-xp u15000) (* base-reward u3)
+        (if (>= total-xp u5000) (* base-reward u2) base-reward)))))
